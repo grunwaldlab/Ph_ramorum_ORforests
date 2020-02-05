@@ -20,12 +20,66 @@ library(scales)
 library(magrittr)
 library(dplyr)
 library(forcats)
+
+library(ape)
+library(adegenet)
+library(poppr)
 ```
 
 
 ## Figures
 
+Prepare for analysis by establishing some basic parameters and loading files
+
+```{r prep_analysis}
+# load R data
+# SSRs
+load("data/genclones_from_SSRs.Rd")
+# metadata
+load("data/sample_info_all.Rd")
+
+
+# Specify repeat lengths and then put in same order as appears in genind
+repeat_lens <- c(2,2,	6,6,6,	2,	4,	2,	2,	2,	3,	4,	2,2,	4)
+names(repeat_lens) <- c("ILVOPrMS79a",	"ILVOPrMS79b",
+                        "PrMS145a", "PrMS145b", "PrMS145c",
+                        "KIPrMS18",
+                        "PrMS45",
+                        "KIPrMS64",
+                        "PrMS39",
+                        "Pr9C3",
+                        "PrMS6",
+                        "ILVOPrMS131",
+                        "KIPrMS82a",	"KIPrMS82b",
+                        "PrMS43")
+
+```
+
 ### Figure 3
+
+Get pairwise distances and format into a tidy dataframe
+
+```{r prep_dists}
+# calc distances
+setPop(ssrs_filtered) <- ~Lineage
+ssrs_filtered_cc <- clonecorrect(ssrs_filtered, strata = ~Lineage)
+all_dist <- bruvo.dist(ssrs_filtered_cc, replen = repeat_lens)
+
+# format
+dist_to_long <- function(dist) {
+  if (class(dist) != "dist") stop("Must use dist object")
+  A <- attr(dist, "Size")
+  B <- if (is.null(attr(dist, "Labels"))) sequence(A) else attr(dist, "Labels")
+  if (isTRUE(attr(dist, "Diag"))) attr(dist, "Diag") <- FALSE
+  if (isTRUE(attr(dist, "Upper"))) attr(dist, "Upper") <- FALSE
+  data.frame(
+    row = B[unlist(lapply(sequence(A)[-1], function(x) x:A))],
+    col = rep(B[-length(B)], (length(B)-1):1),
+    value = as.vector(dist))
+}
+
+dist_df <- dist_to_long(all_dist)
+```
 
 ```{r distance_hist_figs_paper}
 ggplot(dist_df) +
@@ -58,6 +112,60 @@ ggsave("figs/pairwise_dists_v2.tiff", width = 3.25, height = 2, units = "in")
 ```
 
 ### Figure 4
+
+```{r ranges_prep}
+# pick the top N most abundant NA1 MLGs to visualize
+top_n_mlgs <- production_samples %>%
+  dplyr::group_by(MLG, Lineage) %>%
+  dplyr::summarize(count = dplyr::n()) %>%
+  arrange(desc(count)) %>%
+  top_n(15, count)
+top_n_mlgs <- rbind(
+  production_samples %>%
+    dplyr::filter(Lineage == "NA1") %>%
+    dplyr::group_by(Lineage, MLG) %>%
+    dplyr::summarize(count = dplyr::n()) %>%
+    arrange(desc(count)) %>%
+    top_n(15, count) %>%
+    slice(1:15),
+  production_samples %>%
+    dplyr::filter(Lineage == "EU1") %>%
+    dplyr::group_by(Lineage, MLG) %>%
+    dplyr::summarize(count = dplyr::n()) %>%
+    arrange(desc(count)) %>%
+    top_n(15, count) %>%
+    slice(1:15)
+)
+top_n_NA1_allEU1 <- rbind(
+  production_samples %>%
+    dplyr::filter(Lineage == "NA1") %>%
+    dplyr::group_by(Lineage, MLG) %>%
+    dplyr::summarize(count = dplyr::n()) %>%
+    arrange(desc(count)) %>%
+    top_n(15, count) %>%
+    slice(1:15),
+  production_samples %>%
+    dplyr::filter(Lineage == "EU1") %>%
+    dplyr::group_by(Lineage, MLG) %>%
+    dplyr::summarize(count = dplyr::n()) %>%
+    arrange(desc(count))
+)
+
+# get data and format correctly
+ssrs_filtered_sub45 <- ssrs_filtered[ssrs_filtered@mlg[] %in% top_n_NA1_allEU1$MLG]
+setPop(ssrs_filtered_sub45) <- ~Year/Lineage
+
+rangers <- mlg.crosspop(ssrs_filtered_sub45, mlgsub = unique(ssrs_filtered_sub45@mlg), df = TRUE, quiet = TRUE) %>%
+  arrange(desc(Count))
+rangers$Lineage <- str_split(rangers$Population, "_", simplify = TRUE)[,2]
+rangers$Year <- str_split(rangers$Population, "_", simplify = TRUE)[,1]
+# names(rangers)[2] <- "Year"
+rangers_mlg_order <- aggregate(rangers$Count, by = list(Category = rangers$MLG), FUN=sum) %>%
+  arrange(desc(x)) %>%
+  select(Category)
+  
+rangers$MLG <- factor(rangers$MLG, levels = rev(rangers_mlg_order$Category))
+```
 
 ```{r ranges}
 ranges <- ggplot(rangers, aes(x = Year, y = MLG, group = MLG)) + 
