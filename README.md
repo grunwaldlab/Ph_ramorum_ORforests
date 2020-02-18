@@ -4,4 +4,4 @@
 
 R code to reproduce the figures is in `pub_figures.Rmd`.
 
-Be sure to load the R data file into your R environment, which contains the necessary metadata and SSR data (in genind/genclone format).
+Be sure to load the R data file into your R environment, which contains the necessary metadata and SSR data (in genind/genclone format) in the 'sample_info_all.Rd' file.
