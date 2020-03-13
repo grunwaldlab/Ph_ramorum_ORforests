@@ -54,6 +54,54 @@ names(repeat_lens) <- c("ILVOPrMS79a",	"ILVOPrMS79b",
                         "PrMS43")
 
 ```
+### Figure 1
+
+```{r dataprep_msn}
+setPop(ssrs_filtered) <- ~Lineage
+ssrs_lineage_split <- seppop(ssrs_filtered)
+ssrs_filtered_EU1 <- ssrs_lineage_split$EU1
+```
+```{r msn_eu1_nursery_forest}
+ssr_data_genalex_eu1 <- read.genalex("data/curry_county_ssr_eu1nursery_genalex.csv", ploidy = 2)
+splitStrata(ssr_data_genalex_eu1) <- ~Watershed_abbr/Lineage/Year/State
+setPop(ssrs_filtered_EU1) <- ~Watershed_abbr
+eu1_repool_nursery_forest <- repool(ssr_data_genalex_eu1, ssrs_filtered_EU1)
+setPop(eu1_repool_nursery_forest) <- ~Year
+levels(eu1_repool_nursery_forest) <- c(levels(eu1_repool_nursery_forest@pop), "Nursery")
+eu1_repool_nursery_pop <- as.character(pop(eu1_repool_nursery_forest))
+eu1_repool_nursery_pop[eu1_repool_nursery_pop == 2012] <- "Nursery"
+pop(eu1_repool_nursery_forest) <- eu1_repool_nursery_pop
+# pop(eu1_repool_nursery_forest)[pop(eu1_repool_nursery_forest) == 2012] <- "Nursery"
+eu1_repool_nursery_forest_sub <- popsub(eu1_repool_nursery_forest, blacklist = character(0))
+min_span_net <- bruvo.msn(eu1_repool_nursery_forest_sub, replen = c(repeat_lens), add = TRUE, loss = TRUE, showplot = FALSE, include.ties = TRUE)
+# tiff("figs/msn_eu1_nurseries_byyear.tiff", height = 5, width = 5, units = "in", res = 300)
+```
+```{r}
+# set.seed(64)
+# tiff("figs/Figure1.tiff", height = 5, width = 5, units = "in", res = 300)
+svg("figs/Figure1.svg", height = 10, width = 10)
+set.seed(83)
+plot_poppr_msn(eu1_repool_nursery_forest,
+               min_span_net,
+               inds = "none",
+               mlg = FALSE,
+               gadj = 14,
+               nodescale = 29,
+               palette = azur,
+               cutoff = NULL,
+               quantiles = FALSE,
+               beforecut = TRUE,
+               pop.leg = TRUE,
+               size.leg = TRUE,
+               scale.leg = TRUE,
+               nodelab = 1,
+               layfun = igraph::layout_with_gem)
+dev.off()
+```
+
+### Figure 2
+
+This figure was not coded, but created in ArcGIS.
 
 ### Figure 3
 
@@ -435,9 +483,114 @@ ggsave("figs/compo_k3_watershed_v2.tiff", width = 3.25, height = 4, units = "in"
 
 ## Supplementary figures
 
-### Genotype accumulation curves
 
-Figures S1, S4, S5
+### Supplementary table S1
+
+```{r print_repeatlens}
+libraray(knitr)
+kable(repeat_lens)
+```
+
+### Supplementary tables S2 & S3
+
+Tests for recombination
+
+```{r recomb_tests}
+# the steps are: 
+# copy all genotypes into a new genclone object w/the right pop set
+# set a seed
+# calculate diversity without clone correction
+# calculate diversity with clone correction (and test significance)
+# merge tables somehow? Otherwise, just different supplementary tables
+# merge the tables to make writing to one file easier
+# note that the row saying "Total" for each group might get munged
+
+##
+# these columns don't make sense in clone-corrected data and will be removed
+drop_clonecorrected_cols <- c("MLG", "eMLG", "SE", "E.5")
+# start a new random seed, but keep that one over whole analysis
+set.seed(503)
+##
+# Lineage x watershed
+stratum <- ~Lineage/Watershed
+ssrs_filtered_LW <- setPop(ssrs_filtered, stratum)
+ssrs_filtered_LWcc <- clonecorrect(ssrs_filtered, strata = stratum, combine = TRUE)
+
+stratum_string <- str_replace(deparse(stratum), "~", "") %>%
+  str_replace(., "/", " x ")
+
+div_LW <- poppr(ssrs_filtered_LW, plot = FALSE, minsamp = 9,
+                total = TRUE,
+                sample = 999) %>%
+  mutate(clone_corrected = FALSE, stratum=stratum_string)
+
+div_LWcc <- poppr(ssrs_filtered_LWcc, plot = FALSE, minsamp = 9,
+                   total = TRUE,
+                   sample = 999) %>%
+  mutate(clone_corrected = TRUE, stratum=stratum_string) %>%
+  select(-drop_clonecorrected_cols)
+
+div_LW_merged <- div_LW %>%
+  inner_join(div_LWcc, by = c("Pop", "stratum"), suffix = c(".all", ".cc"))
+##
+
+# Lineage x year
+stratum <- ~Lineage/Year
+ssrs_filtered_LY <- setPop(ssrs_filtered, stratum)
+ssrs_filtered_LYcc <- clonecorrect(ssrs_filtered, strata = stratum, combine = TRUE)
+
+stratum_string <- str_replace(deparse(stratum), "~", "") %>%
+  str_replace(., "/", " x ")
+
+div_LY <- poppr(ssrs_filtered_LY, plot = FALSE, minsamp = 9,
+                total = TRUE,
+                sample = 999) %>%
+  mutate(clone_corrected = FALSE, stratum=stratum_string)
+
+div_LYcc <- poppr(ssrs_filtered_LYcc, plot = FALSE, minsamp = 9,
+                   total = TRUE,
+                   sample = 999) %>%
+  mutate(clone_corrected = TRUE, stratum=stratum_string) %>%
+  select(-drop_clonecorrected_cols)
+
+div_LY_merged <- div_LY %>%
+  inner_join(div_LYcc, by = c("Pop", "stratum"), suffix = c(".all", ".cc"))
+
+##
+# Lineage
+stratum <- ~Lineage
+ssrs_filtered_L <- setPop(ssrs_filtered, stratum)
+ssrs_filtered_Lcc <- clonecorrect(ssrs_filtered, strata = stratum, combine = TRUE)
+
+stratum_string <- str_replace(deparse(stratum), "~", "") %>%
+  str_replace(., "/", " x ")
+
+div_L <- poppr(ssrs_filtered_L, plot = FALSE, minsamp = 9,
+                total = TRUE,
+                sample = 999) %>%
+  mutate(clone_corrected = FALSE, stratum=stratum_string)
+
+div_Lcc <- poppr(ssrs_filtered_Lcc, plot = FALSE, minsamp = 9,
+                   total = TRUE,
+                   sample = 999) %>%
+  mutate(clone_corrected = TRUE, stratum=stratum_string) %>%
+  select(-drop_clonecorrected_cols)
+
+div_L_merged <- div_L %>%
+  inner_join(div_Lcc, by = c("Pop", "stratum"), suffix = c(".all", ".cc"))
+
+##
+# joined table
+div_all_merged <- rbind(div_LW_merged, div_LY_merged, div_L_merged)
+
+write.table(div_all_merged, quote = FALSE,
+            file = "man_figs/div_tables.tsv", sep = "\t",
+            row.names = FALSE)
+```
+
+### Supplementary figures S1, S4 & S5
+
+Genotype accumulation curves
 
 ```{r gac_EU1}
 set.seed(503)
